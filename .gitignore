@@ -1,0 +1,27 @@
+node_modules
+dist
+dist-ssr
+*.local
+.vite
+
+# Rust / Tauri
+src-tauri/target
+src-tauri/gen
+
+# Env
+.env
+.env.*
+!.env.example
+
+# Editor
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+
+# Logs
+*.log
+npm-debug.log*
+vite.config.d.ts
+vitest.config.d.ts
+*.tsbuildinfo
