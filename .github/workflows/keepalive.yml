@@ -1,0 +1,17 @@
+name: Supabase keep-alive
+
+# Section 9: prevent free-tier pause after 7 days of inactivity.
+on:
+  schedule:
+    - cron: "0 8 */3 * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          curl -fsS -X POST \
+            -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}" \
+            -H "Content-Type: application/json" \
+            "${{ secrets.SUPABASE_URL }}/rest/v1/" || true

@@ -1,0 +1,87 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            label: linux-x64
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            label: macos-arm64
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            label: windows-x64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Linux system deps
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libssl-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libglib2.0-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev pkg-config
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: reporun/package-lock.json
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: reporun/src-tauri
+      - name: Enforce changelog entry (Section 15)
+        shell: bash
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          if ! grep -q "^## ${TAG#v} " reporun/CHANGELOG.md; then
+            echo "::error::No changelog entry found for ${TAG} in CHANGELOG.md"
+            exit 1
+          fi
+      - name: Install frontend deps
+        working-directory: reporun
+        run: npm ci || npm install
+      - name: Build installers (unsigned)
+        working-directory: reporun
+        env:
+          # Code signing (Section 13) is currently a no-op. Wire these secrets in
+          # when certs are purchased; the build is structured to require no rework.
+          TAURI_SIGNING_PRIVATE_KEY: ""
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+        run: npm run tauri:build -- --target ${{ matrix.target }}
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: reporun-${{ matrix.label }}
+          path: |
+            reporun/src-tauri/target/${{ matrix.target }}/release/bundle/**
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            reporun/src-tauri/target/${{ matrix.target }}/release/bundle/**/*.msi
+            reporun/src-tauri/target/${{ matrix.target }}/release/bundle/**/*.exe
+            reporun/src-tauri/target/${{ matrix.target }}/release/bundle/**/*.dmg
+            reporun/src-tauri/target/${{ matrix.target }}/release/bundle/**/*.app
+            reporun/src-tauri/target/${{ matrix.target }}/release/bundle/**/*.deb
+            reporun/src-tauri/target/${{ matrix.target }}/release/bundle/**/*.AppImage
+          body: |
+            RepoRun ${{ github.ref_name }}
+
+            ⚠️ Installers are **unsigned** at launch. Expected SmartScreen
+            (Windows) / Gatekeeper (macOS) warnings are disclosed on the
+            download page. See `docs/terms.md`.
+          draft: false
+          prerelease: false
